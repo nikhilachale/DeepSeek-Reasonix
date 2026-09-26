@@ -358,8 +358,14 @@ windows)
 	# signing-files.txt enumerates every PE file (flat payload + app tree); the
 	# SignPath artifact configuration and the Authenticode verifier consume it.
 	node "$ROOT/desktop/packaging/signing-files.mjs" "$payload_dir"
-	VERSION="$VERSION" "$ROOT/scripts/package-windows-desktop.sh" "$arch" "$payload_dir"
-	node "$ROOT/desktop/packaging/verify.mjs" "$ROOT/dist/${APPNAME}-windows-${arch}.zip" --kind windows-portable-zip
+	# A signed release rebuilds the installer and portable archive from the
+	# signed payload; compressing the unsigned pair here would be discarded.
+	if [ "${REASONIX_WINDOWS_PAYLOAD_ONLY:-0}" = "1" ]; then
+		mkdir -p "$ROOT/dist"
+	else
+		VERSION="$VERSION" "$ROOT/scripts/package-windows-desktop.sh" "$arch" "$payload_dir"
+		node "$ROOT/desktop/packaging/verify.mjs" "$ROOT/dist/${APPNAME}-windows-${arch}.zip" --kind windows-portable-zip
+	fi
 	;;
 linux)
 	service_out="$ROOT/desktop/build/bin/$BINNAME"

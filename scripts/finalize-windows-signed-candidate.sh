@@ -23,27 +23,45 @@ for variable in CERTUM_KEY_ID MINISIGN_PRIVATE_KEY MINISIGN_PASSWORD RELEASE_SOU
 	[ -n "${!variable:-}" ] || { echo "missing $variable" >&2; exit 1; }
 done
 
-pwsh -NoProfile -File "$control_root/scripts/sign-certum.ps1" -PayloadDirectory "$signed_payload"
+# FINALIZE_PHASE splits the run so the Certum steps stay in one session while
+# the two architectures compress their installers at the same time:
+# sign (Certum), package (no credentials), seal (Certum). Unset runs all three.
+phase="${FINALIZE_PHASE:-all}"
+case "$phase" in
+all | sign | package | seal) ;;
+*) echo "unsupported FINALIZE_PHASE: $phase" >&2; exit 1 ;;
+esac
+run_phase() { [ "$phase" = all ] || [ "$phase" = "$1" ]; }
 
-# Keep the immutable checkout's NSIS template and icon. The signing handoff
-# carries generated identity and payload files, not these committed inputs.
-rm -rf "$dist" "$bundle"
-mkdir -p "$product_root/desktop/build/windows/installer"
-cp "$signing_work/desktop/build/windows/installer/reasonix_project.nsh" \
-	"$product_root/desktop/build/windows/installer/"
-(
-	cd "$product_root/desktop"
-	go run ./cmd/sign windows-payload "$signed_payload" "$version"
-	go run ./cmd/sign sign "$signed_payload/reasonix-payload.json"
-	go run ./cmd/sign verify "$signed_payload/reasonix-payload.json"
-)
-
-REASONIX_REQUIRE_PAYLOAD_MANIFEST=1 \
-	"$product_root/scripts/package-windows-desktop.sh" "$arch" "$signed_payload"
-mv "$product_root/dist" "$dist"
+if run_phase sign; then
+	pwsh -NoProfile -File "$control_root/scripts/sign-certum.ps1" -PayloadDirectory "$signed_payload"
+fi
+if ! run_phase package && ! run_phase seal; then
+	exit 0
+fi
 
 installer="$dist/Reasonix-windows-$arch-installer.exe"
 portable="$dist/Reasonix-windows-$arch.zip"
+if run_phase package; then
+	# Keep the immutable checkout's NSIS template and icon. The signing handoff
+	# carries generated identity and payload files, not these committed inputs.
+	rm -rf "$dist" "$bundle"
+	mkdir -p "$product_root/desktop/build/windows/installer"
+	cp "$signing_work/desktop/build/windows/installer/reasonix_project.nsh" \
+		"$product_root/desktop/build/windows/installer/"
+	(
+		cd "$product_root/desktop"
+		go run ./cmd/sign windows-payload "$signed_payload" "$version"
+		go run ./cmd/sign sign "$signed_payload/reasonix-payload.json"
+		go run ./cmd/sign verify "$signed_payload/reasonix-payload.json"
+	)
+
+	REASONIX_REQUIRE_PAYLOAD_MANIFEST=1 \
+		"$product_root/scripts/package-windows-desktop.sh" "$arch" "$signed_payload"
+	mv "$product_root/dist" "$dist"
+fi
+run_phase seal || exit 0
+
 pwsh -NoProfile -File "$control_root/scripts/sign-certum.ps1" -FilePath "$installer"
 
 portable_layout="legacy-dual"

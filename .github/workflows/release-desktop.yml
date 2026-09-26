@@ -603,6 +603,9 @@ jobs:
             exit 1
           fi
       - name: Build and package
+        env:
+          # windows-sign rebuilds both packages from the signed payload.
+          REASONIX_WINDOWS_PAYLOAD_ONLY: ${{ env.HAS_CERTUM == 'true' && '1' || '0' }}
         run: scripts/desktop-build.sh "${{ matrix.platform }}" "${{ needs.resolve.outputs.version }}" "${{ needs.resolve.outputs.channel }}"
       - name: Checkout protected release verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -805,7 +808,79 @@ jobs:
           username: ${{ secrets.CERTUM_USERNAME }}
           otp-uri: ${{ secrets.CERTUM_OTP_URI }}
           thumbprint: ${{ secrets.CERTUM_KEY_ID }}
-      - name: Finalize amd64 in the shared Certum session
+      # Certum signing stays in one session, so the two architectures sign in
+      # turn; compressing their installers needs no credentials and is what
+      # takes minutes, so both packages build at once in separate trees.
+      - name: Sign both payloads in the shared Certum session
+        if: steps.reuse.outputs.needs_signing == 'true'
+        env:
+          CERTUM_KEY_ID: ${{ secrets.CERTUM_KEY_ID }}
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+          RELEASE_SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
+          RELEASE_CONTROL_SHA: ${{ github.workflow_sha }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+          RELEASE_CHANNEL: ${{ needs.resolve.outputs.channel }}
+          RELEASE_SIGNING_FINGERPRINT: ${{ needs.signing-contract.outputs.fingerprint }}
+          RELEASE_ARTIFACT_PREFIX: ${{ needs.resolve.outputs.artifact_prefix }}
+          RELEASE_RUNNER_TEMP: ${{ runner.temp }}
+          REUSE_AMD64: ${{ steps.reuse.outputs.amd64 }}
+          REUSE_ARM64: ${{ steps.reuse.outputs.arm64 }}
+        run: |
+          runner_temp="$(cygpath -u "$RELEASE_RUNNER_TEMP")"
+          for arch in amd64 arm64; do
+            reuse_var="REUSE_${arch^^}"
+            [ "${!reuse_var}" != "true" ] || continue
+            FINALIZE_PHASE=sign bash release-control/scripts/finalize-windows-signed-candidate.sh "$arch" \
+              "$runner_temp/signing-work/$arch" "signed-payload-$arch" "dist-$arch" \
+              "$runner_temp/desktop-bundle-$arch" "${{ needs.resolve.outputs.version }}"
+          done
+      - name: Package both architectures in parallel
+        if: steps.reuse.outputs.needs_signing == 'true'
+        env:
+          CERTUM_KEY_ID: ${{ secrets.CERTUM_KEY_ID }}
+          MINISIGN_PRIVATE_KEY: ${{ secrets.MINISIGN_PRIVATE_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+          RELEASE_SOURCE_SHA: ${{ needs.resolve.outputs.sha }}
+          RELEASE_CONTROL_SHA: ${{ github.workflow_sha }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+          RELEASE_CHANNEL: ${{ needs.resolve.outputs.channel }}
+          RELEASE_SIGNING_FINGERPRINT: ${{ needs.signing-contract.outputs.fingerprint }}
+          RELEASE_ARTIFACT_PREFIX: ${{ needs.resolve.outputs.artifact_prefix }}
+          RELEASE_RUNNER_TEMP: ${{ runner.temp }}
+          REUSE_AMD64: ${{ steps.reuse.outputs.amd64 }}
+          REUSE_ARM64: ${{ steps.reuse.outputs.arm64 }}
+        run: |
+          set -euo pipefail
+          runner_temp="$(cygpath -u "$RELEASE_RUNNER_TEMP")"
+          work="$(pwd)"
+          pids=()
+          for arch in amd64 arm64; do
+            reuse_var="REUSE_${arch^^}"
+            [ "${!reuse_var}" != "true" ] || continue
+            root="$work"
+            if [ "$arch" != amd64 ]; then
+              root="$runner_temp/product-$arch"
+              git worktree add --detach "$root" HEAD
+            fi
+            (cd "$root" && FINALIZE_PHASE=package bash "$work/release-control/scripts/finalize-windows-signed-candidate.sh" "$arch" \
+              "$runner_temp/signing-work/$arch" "$work/signed-payload-$arch" "$work/dist-$arch" \
+              "$runner_temp/desktop-bundle-$arch" "${{ needs.resolve.outputs.version }}") \
+              > "$runner_temp/package-$arch.log" 2>&1 &
+            pids+=("$!:$arch")
+          done
+          failed=0
+          for entry in "${pids[@]}"; do
+            arch="${entry#*:}"
+            if ! wait "${entry%%:*}"; then failed=1; echo "::error::packaging windows-$arch failed"; fi
+            echo "::group::package windows-$arch"
+            cat "$runner_temp/package-$arch.log"
+            echo "::endgroup::"
+          done
+          exit "$failed"
+      - name: Seal amd64 in the shared Certum session
         if: steps.reuse.outputs.amd64 != 'true'
         env:
           CERTUM_KEY_ID: ${{ secrets.CERTUM_KEY_ID }}
@@ -819,11 +894,19 @@ jobs:
           RELEASE_SIGNING_FINGERPRINT: ${{ needs.signing-contract.outputs.fingerprint }}
           RELEASE_ARTIFACT_PREFIX: ${{ needs.resolve.outputs.artifact_prefix }}
           RELEASE_RUNNER_TEMP: ${{ runner.temp }}
+          REUSE_AMD64: ${{ steps.reuse.outputs.amd64 }}
+          REUSE_ARM64: ${{ steps.reuse.outputs.arm64 }}
         run: |
           runner_temp="$(cygpath -u "$RELEASE_RUNNER_TEMP")"
-          bash release-control/scripts/finalize-windows-signed-candidate.sh amd64 \
-            "$runner_temp/signing-work/amd64" signed-payload-amd64 dist-amd64 \
-            "$runner_temp/desktop-bundle-amd64" "${{ needs.resolve.outputs.version }}"
+          work="$(pwd)"
+          root="$work"
+          (cd "$root" && FINALIZE_PHASE=seal bash "$work/release-control/scripts/finalize-windows-signed-candidate.sh" amd64 \
+            "$runner_temp/signing-work/amd64" "$work/signed-payload-amd64" "$work/dist-amd64" \
+            "$runner_temp/desktop-bundle-amd64" "${{ needs.resolve.outputs.version }}")
+          if [ "$root" != "$work" ]; then
+            mkdir -p desktop/build/reports
+            cp -R "$root/desktop/build/reports/windows-amd64" desktop/build/reports/
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: steps.reuse.outputs.amd64 != 'true'
         with:
@@ -832,7 +915,7 @@ jobs:
           overwrite: true
           if-no-files-found: error
           retention-days: 7
-      - name: Finalize arm64 in the shared Certum session
+      - name: Seal arm64 in the shared Certum session
         if: steps.reuse.outputs.arm64 != 'true'
         env:
           CERTUM_KEY_ID: ${{ secrets.CERTUM_KEY_ID }}
@@ -846,11 +929,19 @@ jobs:
           RELEASE_SIGNING_FINGERPRINT: ${{ needs.signing-contract.outputs.fingerprint }}
           RELEASE_ARTIFACT_PREFIX: ${{ needs.resolve.outputs.artifact_prefix }}
           RELEASE_RUNNER_TEMP: ${{ runner.temp }}
+          REUSE_AMD64: ${{ steps.reuse.outputs.amd64 }}
+          REUSE_ARM64: ${{ steps.reuse.outputs.arm64 }}
         run: |
           runner_temp="$(cygpath -u "$RELEASE_RUNNER_TEMP")"
-          bash release-control/scripts/finalize-windows-signed-candidate.sh arm64 \
-            "$runner_temp/signing-work/arm64" signed-payload-arm64 dist-arm64 \
-            "$runner_temp/desktop-bundle-arm64" "${{ needs.resolve.outputs.version }}"
+          work="$(pwd)"
+          root="$runner_temp/product-arm64"
+          (cd "$root" && FINALIZE_PHASE=seal bash "$work/release-control/scripts/finalize-windows-signed-candidate.sh" arm64 \
+            "$runner_temp/signing-work/arm64" "$work/signed-payload-arm64" "$work/dist-arm64" \
+            "$runner_temp/desktop-bundle-arm64" "${{ needs.resolve.outputs.version }}")
+          if [ "$root" != "$work" ]; then
+            mkdir -p desktop/build/reports
+            cp -R "$root/desktop/build/reports/windows-arm64" desktop/build/reports/
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: steps.reuse.outputs.arm64 != 'true'
         with:
