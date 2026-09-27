@@ -38,6 +38,7 @@ authentication is incomplete.
 | `--append-system-prompt-file PATH` | Append UTF-8 host instructions after the configured system prompt and project memory for this process. |
 | `-c`, `--continue` | Resume the most recent session. |
 | `-r`, `--resume [QUERY]` | Open the session picker, or resume a matching session. |
+| `--resume-exact ID` | Resume only the specified canonical session identity; fail if unavailable. Interactive CLI only. |
 | `--copy` | Continue in a writable copy of the resumed session. |
 | `--allowed-tools RULES` | Add session-only permission allow rules. Repeatable; `--allowedTools` is an alias. |
 | `--permission-mode MODE` | Start with a specific permission posture. |
@@ -377,6 +378,7 @@ reasonix --continue
 reasonix --resume
 reasonix --resume provider-config
 reasonix --resume <session-id>
+reasonix --resume-exact <canonical-session-id>
 reasonix --resume provider-config --copy
 ```
 
@@ -386,6 +388,11 @@ reasonix --resume provider-config --copy
   preview substring. Missing and ambiguous matches fail with a descriptive
   error.
 - `--resume=true` and `--resume=false` remain accepted for compatibility.
+- `--resume-exact ID` directly opens a canonical session in the effective
+  workspace, including sessions outside the recent picker list. It never treats
+  the ID as a file path, searches titles/previews, or opens a picker. Missing or
+  legacy-only IDs fail; an identity change during opening also fails. It cannot
+  be combined with `--resume`, `--continue`, or `--copy` and is not a `run` flag.
 - `--copy` leaves the original transcript untouched and continues in a new
   writable session. Use it when another Reasonix process owns the original.
 

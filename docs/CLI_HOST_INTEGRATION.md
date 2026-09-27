@@ -12,15 +12,23 @@ reasonix run --dir /path/to/project --events-jsonl \
   --append-system-prompt-file /absolute/path/host-instructions.md \
   "implement the requested change"
 
-reasonix run --dir /path/to/project --events-jsonl \
-  --resume EXACT_SESSION_ID \
-  --append-system-prompt-file /absolute/path/host-instructions.md \
-  "continue the same task"
+reasonix --dir /path/to/project \
+  --resume-exact CANONICAL_SESSION_ID \
+  --append-system-prompt-file /absolute/path/host-instructions.md
 ```
 
-Use the exact session ID instead of a partial title or preview query for resume.
-Supply the flag again on each new process, including resume. `EXACT_SESSION_ID`
-above is a placeholder.
+For strict interactive restore, pass the native canonical session ID to
+`--resume-exact`. It resolves directly within the effective workspace and never
+uses file-path precedence, fuzzy queries, or the recent-session picker. Missing
+and legacy-only IDs fail instead of starting another conversation. Opening must
+retain the requested identity. `--resume`, `--continue`, and `--copy` cannot be
+combined with this flag. Supply the prompt-file flag again on every new process,
+including resume. `CANONICAL_SESSION_ID` above is a placeholder.
+
+Hosts deliver the next task through the interactive composer after confirming
+readiness. `--resume-exact` is available on the interactive CLI (including the
+`chat` and `code` aliases), not on `reasonix run`. The ordinary `--resume QUERY`
+interface keeps its broader file/title/preview matching semantics.
 
 ## Composition and lifetime
 

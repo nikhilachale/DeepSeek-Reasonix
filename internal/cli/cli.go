@@ -964,6 +964,7 @@ func chatREPL(args []string, version string) int {
 	cont := registerContinueFlag(fs)
 	resume := fs.StringP("resume", "r", "", "resume by session ID/query, or open the picker when no value is given")
 	fs.Lookup("resume").NoOptDefVal = resumePickerSentinel
+	resumeExact := fs.String("resume-exact", "", "resume only this canonical session ID; never search files, titles or previews")
 	copySession := fs.Bool("copy", false, "with --resume/--continue: duplicate the selected session and continue in the copy (escape hatch when the original is held by another Reasonix process)")
 	legacyYolo := fs.Bool("dangerously-skip-permissions", false, "deprecated: use --permission-mode danger-full-access")
 	fs.BoolVar(legacyYolo, "yolo", false, "deprecated alias; migrates to workspace-write")
@@ -1025,7 +1026,7 @@ func chatREPL(args []string, version string) int {
 	// Decide whether we're starting fresh or resuming. --resume opens an
 	// interactive picker; --continue / -c jumps straight into the newest.
 	resumeValue := normalizedResumeFlag(*resume)
-	resumeTarget, rc := interactiveResumeTarget(resumeValue, *cont, *copySession)
+	resumeTarget, rc := interactiveStartupResumeTarget(fs, resumeValue, *resumeExact, *cont, *copySession)
 	if rc != 0 {
 		return rc
 	}
@@ -1039,7 +1040,7 @@ func chatREPL(args []string, version string) int {
 		fmt.Printf("continuing in a session copy: %s\n", copied)
 		resumePath = copied
 	}
-	sessionMode := cliTelemetrySessionMode(*cont, resumeValue != "", *copySession)
+	sessionMode := cliTelemetrySessionMode(*cont, !resumeTarget.empty(), *copySession)
 	reporter := startCLITelemetry(cfg, telemetry.Options{
 		Version: version, Interactive: isInteractive(), CLIMode: "tui",
 		PermissionMode: *permissionMode, SessionMode: sessionMode,

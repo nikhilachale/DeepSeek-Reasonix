@@ -239,7 +239,7 @@ func looksLikeMachineSessionID(query string) bool {
 
 func isDefaultInteractiveFlag(arg string) bool {
 	switch arg {
-	case "--model", "--max-steps", "--continue", "-c", "--resume", "-r", "--copy", "--dangerously-skip-permissions", "--yolo", "--permission-mode", "--effort", "--dir", "--append-system-prompt-file", "--add-dir", "--allowed-tools", "--allowedTools", "--profile", "--preset":
+	case "--model", "--max-steps", "--continue", "-c", "--resume", "-r", "--resume-exact", "--copy", "--dangerously-skip-permissions", "--yolo", "--permission-mode", "--effort", "--dir", "--append-system-prompt-file", "--add-dir", "--allowed-tools", "--allowedTools", "--profile", "--preset":
 		return true
 	}
 	if name, _, ok := strings.Cut(arg, "="); ok && isDefaultInteractiveFlag(name) {

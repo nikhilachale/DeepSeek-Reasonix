@@ -51,7 +51,7 @@ func TestAppendSystemPromptRestoresCurrentGuidanceWithExactSession(t *testing.T)
 	}
 	old.Close()
 	current := newController("current process guidance 世界")
-	if err := commitStartupResumeWithStandingInstructions(nil, nil, current, nil, cliResumeTarget{ref: ref}, flagTakeoverApproval(false), true); err != nil {
+	if err := commitStartupResumeWithStandingInstructions(nil, nil, current, nil, cliResumeTarget{ref: ref, exact: true}, flagTakeoverApproval(false), true); err != nil {
 		t.Fatal(err)
 	}
 	gotRef, ok := current.SessionRef()

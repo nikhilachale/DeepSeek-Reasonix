@@ -170,10 +170,15 @@ func copySessionExitCode(copySession bool, target cliResumeTarget) int {
 func commitStartupResume(binding *cliTakeoverBinding, manager *cliTakeoverManager, ctrl *control.Controller,
 	resumed *agent.Session, target cliResumeTarget, approve func(error) bool) error {
 	err := commitResumedSession(binding, manager, ctrl, resumed, target)
-	if err == nil || !target.canonical() || !errors.Is(err, session.ErrWriterOwned) || !approve(err) {
-		return err
+	if err != nil && target.canonical() && errors.Is(err, session.ErrWriterOwned) && approve(err) {
+		err = cliStartupCanonicalTakeover(ctrl, manager, target)
 	}
-	return cliStartupCanonicalTakeover(ctrl, manager, target)
+	if err == nil && target.exact {
+		if ref, ok := ctrl.SessionRef(); !ok || ref != target.ref {
+			return errors.New("exact resume changed the requested canonical session identity")
+		}
+	}
+	return err
 }
 
 // flagTakeoverApproval answers for --takeover, which commits before the

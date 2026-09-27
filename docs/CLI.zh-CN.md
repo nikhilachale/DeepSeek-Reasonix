@@ -30,6 +30,7 @@ reasonix --dir /path/to/project
 | `--add-dir PATH` | 增加一个允许工具写入的目录；可重复传入。 |
 | `-c`、`--continue` | 恢复最近一次会话。 |
 | `-r`、`--resume [QUERY]` | 打开会话选择器，或恢复匹配的会话。 |
+| `--resume-exact ID` | 仅恢复指定的规范会话标识；不存在时失败。仅适用于交互式 CLI。 |
 | `--copy` | 复制要恢复的会话，并在可写副本中继续。 |
 | `--allowed-tools RULES` | 增加仅当前会话生效的权限 allow 规则；可重复传入，`--allowedTools` 是别名。 |
 | `--permission-mode MODE` | 以指定的权限姿态启动。 |
@@ -335,6 +336,10 @@ reasonix --resume provider-config --copy
 - `--resume QUERY` 接受精确 session ID 或路径，也支持唯一匹配标题或预览内容的
   子串。没有匹配或匹配不唯一时会返回明确错误。
 - 为保持兼容，仍接受 `--resume=true` 和 `--resume=false`。
+- `--resume-exact ID` 直接打开当前 workspace 中的规范会话，不受最近会话列表
+  数量限制，不将 ID 当作路径，不搜索标题或预览，也不打开选择器。不存在、仅有
+  旧格式记录或打开时标识发生变化都会失败。它不能与 `--resume`、`--continue`
+  或 `--copy` 组合，也不是 `run` 子命令的参数。
 - `--copy` 不修改原 transcript，而是在新的可写会话中继续。原会话已被另一个
   Reasonix 进程占用时可以使用它。
 

@@ -642,6 +642,7 @@ Usage:
   reasonix run [--model NAME] [--max-steps N] [-c|--continue] [--resume PATH] [--copy] [--output-format FORMAT] <task>
   reasonix run --events-jsonl [--model NAME] <task>      emit redacted structured events as JSONL
   reasonix [run] --append-system-prompt-file PATH       append host system instructions for this process
+  reasonix --resume-exact ID                           resume only this canonical session identity
   reasonix review [--base BRANCH] [--commit SHA] [--model NAME]  AI-powered code review on local diffs
   reasonix web [--model NAME] [--addr HOST:PORT] [--no-open]  start the local Web UI and open it in the default browser
   reasonix serve [--model NAME] [--addr HOST:PORT] [--auth none|token|password] [--token STR] [--password STR] [--hash-password]  serve over HTTP+SSE (with optional auth)

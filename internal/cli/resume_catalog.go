@@ -29,8 +29,9 @@ const canonicalResumeWalkCap = 20 * canonicalResumeScanCap
 // cliResumeTarget is one resumable conversation: either a legacy transcript
 // path or a final-format session identity. Exactly one side is set.
 type cliResumeTarget struct {
-	path string             // legacy .jsonl transcript
-	ref  session.SessionRef // sessions-v4 identity (SessionID != "" when canonical)
+	path  string             // legacy .jsonl transcript
+	ref   session.SessionRef // sessions-v4 identity (SessionID != "" when canonical)
+	exact bool               // refuse native migration that changes the requested identity
 }
 
 func (t cliResumeTarget) canonical() bool { return t.ref.SessionID != "" }
